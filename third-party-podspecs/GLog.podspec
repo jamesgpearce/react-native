@@ -6,12 +6,34 @@ Pod::Spec.new do |spec|
   spec.summary = 'Google logging module'
   spec.authors = 'Google'
 
+  # Keep in sync with ios-configure-glog.sh
   spec.prepare_command = <<-CMD
-    echo '#!/bin/sh' > ./ios-cc.sh
-    echo 'exec "$(xcrun -find -sdk iphoneos cc)" -arch armv7 -isysroot "$(xcrun -sdk iphoneos --show-sdk-path)" "$@"' >> ./ios-cc.sh
-    chmod 755 ./ios-cc.sh
-    CC="`pwd`"/ios-cc.sh CXX="`pwd`"/ios-cc.sh ./configure --host arm-apple-darwin
-    CMD
+export CC="$(xcrun -find -sdk iphoneos cc) -arch armv7 -isysroot $(xcrun -sdk iphoneos --show-sdk-path)"
+./configure --host arm-apple-darwin
+cat << EOF >> src/config.h
+/* Add in so we have Apple Target Conditionals */
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#include <Availability.h>
+#endif
+
+/* Special configuration for AppleTVOS */
+#if TARGET_OS_TV
+#undef HAVE_SYSCALL_H
+#undef HAVE_SYS_SYSCALL_H
+#undef OS_MACOSX
+#endif
+
+/* Special configuration for ucontext */
+#undef HAVE_UCONTEXT_H
+#undef PC_FROM_UCONTEXT
+#if defined(__x86_64__)
+#define PC_FROM_UCONTEXT uc_mcontext->__ss.__rip
+#elif defined(__i386__)
+#define PC_FROM_UCONTEXT uc_mcontext->__ss.__eip
+#endif
+EOF
+CMD
 
   spec.source = { :git => 'https://github.com/google/glog.git',
                   :tag => "v#{spec.version}" }
@@ -24,11 +46,13 @@ Pod::Spec.new do |spec|
                       'src/symbolize.cc',
                       'src/utilities.cc',
                       'src/vlog_is_on.cc'
-  spec.public_header_files = 'src/glog/*.h'
+  spec.exclude_files = 'src/windows/**/*'
+  spec.public_header_files = "src/glog/*.h"
+  spec.libraries           = "stdc++"
   spec.pod_target_xcconfig = { "USE_HEADERMAP" => "NO",
                                "HEADER_SEARCH_PATHS" => "$(PODS_TARGET_SRCROOT)/src" }
 
   # Pinning to the same version as React.podspec.
-  spec.platform = :ios, '8.0'
+  spec.platform = :ios, "8.0"
 
 end
